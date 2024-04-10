@@ -14,36 +14,46 @@ def main():
 
 
 def parse_args():
+    alias_help = "Paper or author ID or alias"
     parser = argparse.ArgumentParser()
     parser.set_defaults(func=hello)
     subparsers = parser.add_subparsers()
 
-    search_parser = subparsers.add_parser("search")
-    search_parser.add_argument("query")
+    search_parser = subparsers.add_parser("search", help="Search for papers")
+    search_parser.add_argument("query", help="Search term")
     search_parser.set_defaults(func=search)
 
-    dl_parser = subparsers.add_parser("dl")
-    dl_parser.add_argument("alias")
-    dl_parser.add_argument("--url", action="store_true")
+    dl_parser = subparsers.add_parser("dl", help="Download a paper")
+    dl_parser.add_argument("alias", help=alias_help)
+    dl_parser.add_argument(
+        "--url", action="store_true", help="Print paper url to stdout"
+    )
     dl_parser.set_defaults(func=dl)
 
-    citations_parser = subparsers.add_parser("citations")
-    citations_parser.add_argument("alias")
+    citations_parser = subparsers.add_parser(
+        "citations", help="Get the articles that cite a paper"
+    )
+    citations_parser.add_argument("alias", help=alias_help)
     citations_parser.set_defaults(func=citations)
 
-    paper_parser = subparsers.add_parser("paper")
-    paper_parser.add_argument("alias")
-    paper_parser.add_argument("--fields", type=str, default=FIELDS)
+    paper_parser = subparsers.add_parser("paper", help="Get info on a paper")
+    paper_parser.add_argument("alias", help=alias_help)
+    paper_parser.add_argument(
+        "--fields", type=str, default=FIELDS, help="Which fields to get from the API"
+    )
     paper_parser.set_defaults(func=paper)
 
-    identifier_parser = subparsers.add_parser("id")
-    identifier_parser.add_argument("alias")
+    identifier_parser = subparsers.add_parser("id", help="Get a paper identifier")
+    identifier_parser.add_argument("alias", help=alias_help)
     identifier_parser.set_defaults(func=identifier)
 
-    author_parser = subparsers.add_parser("author")
-    author_parser.add_argument("alias")
+    author_parser = subparsers.add_parser("author", help="Get an author's papers")
+    author_parser.add_argument("alias", help=alias_help)
     author_parser.add_argument(
-        "--fields", type=str, default="papers.year,papers.title,papers.authors"
+        "--fields",
+        type=str,
+        default="papers.year,papers.title,papers.authors",
+        help="Which fields to retrieve",
     )
     author_parser.set_defaults(func=author)
 
@@ -68,7 +78,7 @@ def search(query=None, **_):
     response = requests.get(
         os.path.join(URL, "paper/search"),
         params=dict(query=query, fields=FIELDS),
-        headers={"X-API-KEY": API_KEY}
+        headers={"X-API-KEY": API_KEY},
     )
     if response.ok and "data" in response.json():
         papers = response.json()["data"]
@@ -83,7 +93,7 @@ def author(alias=None, fields=None, **_):
     response = requests.get(
         os.path.join(URL, "author", author_id),
         params=dict(fields=fields),
-        headers={"X-API-KEY": API_KEY}
+        headers={"X-API-KEY": API_KEY},
     )
     papers = response.json()["papers"]
     save_alias(get_aliases(papers))
@@ -95,7 +105,7 @@ def citations(alias=None, **_):
     response = requests.get(
         os.path.join(URL, "paper", paper_id, "citations"),
         params=dict(fields=FIELDS),
-        headers={"X-API-KEY": API_KEY}
+        headers={"X-API-KEY": API_KEY},
     )
     papers = [item["citingPaper"] for item in response.json()["data"]]
     save_alias(get_aliases(papers))
@@ -107,7 +117,7 @@ def dl(alias=None, url=False, **_):
     response = requests.get(
         os.path.join(URL, "paper", paper_id),
         params=dict(fields="openAccessPdf,externalIds,citationStyles,isOpenAccess"),
-        headers={"X-API-KEY": API_KEY}
+        headers={"X-API-KEY": API_KEY},
     ).json()
     bibtex_id = get_bibtex_id(response["citationStyles"]["bibtex"])
     save_alias({bibtex_id: paper_id})
