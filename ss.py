@@ -4,7 +4,8 @@ import argparse, requests, os, json, re, sys, operator
 
 IDS = os.path.expanduser("~/.ss/ids.json")
 URL = "http://api.semanticscholar.org/graph/v1/"
-FIELDS = "title,year,authors,abstract,citationStyles,paperId"
+FIELDS = "title,year,authors,abstract,citationStyles,paperId,openAccessPdf"
+API_KEY = os.environ.get("S2_API_KEY")
 
 
 def main():
@@ -23,6 +24,7 @@ def parse_args():
 
     dl_parser = subparsers.add_parser("dl")
     dl_parser.add_argument("alias")
+    dl_parser.add_argument("--url", action="store_true")
     dl_parser.set_defaults(func=dl)
 
     citations_parser = subparsers.add_parser("citations")
@@ -57,6 +59,7 @@ def paper(alias=None, fields=None, **_):
     response = requests.get(
         os.path.join(URL, "paper", paper_id),
         params=dict(fields=fields),
+        headers={"X-API-KEY": API_KEY},
     )
     sys.stdout.write(response.text)
 
@@ -65,6 +68,7 @@ def search(query=None, **_):
     response = requests.get(
         os.path.join(URL, "paper/search"),
         params=dict(query=query, fields=FIELDS),
+        headers={"X-API-KEY": API_KEY}
     )
     if response.ok and "data" in response.json():
         papers = response.json()["data"]
@@ -79,6 +83,7 @@ def author(alias=None, fields=None, **_):
     response = requests.get(
         os.path.join(URL, "author", author_id),
         params=dict(fields=fields),
+        headers={"X-API-KEY": API_KEY}
     )
     papers = response.json()["papers"]
     save_alias(get_aliases(papers))
@@ -90,32 +95,40 @@ def citations(alias=None, **_):
     response = requests.get(
         os.path.join(URL, "paper", paper_id, "citations"),
         params=dict(fields=FIELDS),
+        headers={"X-API-KEY": API_KEY}
     )
     papers = [item["citingPaper"] for item in response.json()["data"]]
     save_alias(get_aliases(papers))
     json.dump(list(map(flatten_paper, papers)), sys.stdout)
 
 
-def dl(alias=None, **_):
+def dl(alias=None, url=False, **_):
     paper_id = get_id(alias)
     response = requests.get(
         os.path.join(URL, "paper", paper_id),
         params=dict(fields="openAccessPdf,externalIds,citationStyles,isOpenAccess"),
+        headers={"X-API-KEY": API_KEY}
     ).json()
     bibtex_id = get_bibtex_id(response["citationStyles"]["bibtex"])
     save_alias({bibtex_id: paper_id})
     pdf_path = os.path.expanduser(f"~/papers/{bibtex_id}.pdf")
-    print(pdf_path)
-    if os.path.exists(pdf_path):
-        print("Already downloaded.", file=sys.stderr)
+    if response["isOpenAccess"]:
+        paper_url = response["openAccessPdf"]["url"]
+    elif "ArXiv" in response["externalIds"]:
+        paper_url = f"https://arxiv.org/pdf/{response['externalIds']['ArXiv']}"
     else:
-        if response["isOpenAccess"]:
-            paper_url = response["openAccessPdf"]["url"]
-        elif "ArXiv" in response["externalIds"]:
-            paper_url = f"https://arxiv.org/pdf/{response['externalIds']['ArXiv']}"
+        print("No paper url", file=sys.stderr)
+        return
+    if url:
+        print(paper_url)
+    elif os.path.exists(pdf_path):
+        print("Already downloaded.", file=sys.stderr)
+        print(pdf_path)
+    else:
         paper_response = requests.get(paper_url)
         with open(pdf_path, "wb") as f:
             f.write(paper_response.content)
+        print(pdf_path)
 
 
 def identifier(alias=None, **_):
